@@ -28,7 +28,7 @@ const Dashboard = () => {
       <header className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-gray-800 pb-6">
         <div className="text-center md:text-right">
           <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500 font-arabic">
-           طريق الهداية والطمأنينة 🌙
+          مشكاة الخير 
           </h1>
           <p className="text-gray-400 mt-1">مرحباً بك ، نسأل الله لك يوماً عامراً بالذكر والمغفرة</p>
         </div>
