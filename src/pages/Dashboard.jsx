@@ -87,7 +87,7 @@ const Dashboard = () => {
       <h2 className="text-2xl font-bold mb-6 text-white border-r-4 border-blue-500 pr-3">الأقسام الرئيسية للمنصة</h2>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
-          { title: 'القرآن الكريم', icon: '📖', type: 'modal', path: '/quran', color: 'hover:border-green-400 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]' },
+          { title: 'القرآن الكريم', icon: '📖', type: 'link', path: '/quran', color: 'hover:border-green-400 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]' },
           { title: 'الحديث النبوي', icon: '📜', type: 'modal', path: '/hadith', color: 'hover:border-blue-400 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)]' },
           { title: 'ركن الفتاوى', icon: '⚖️', type: 'modal', modalId: 'fatwa', color: 'hover:border-amber-400 hover:shadow-[0_0_20px_rgba(245,158,11,0.3)]' },
           { title: 'المكتبة الرقمية', icon: '📚', type: 'modal', path: '/library', color: 'hover:border-purple-400 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]' }, 
