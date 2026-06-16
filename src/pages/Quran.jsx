@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 
 const Quran = () => {
   // حالات إدارة البيانات
@@ -17,10 +16,6 @@ const Quran = () => {
   const [bookmark, setBookmark] = useState(null);
   const [showAssistant, setShowAssistant] = useState(false);
   
-  // البحث
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-
   // الصوتيات
   const [playingAudio, setPlayingAudio] = useState(null);
   const audioRef = useRef(new Audio());
@@ -45,7 +40,7 @@ const Quran = () => {
       .trim();
   };
 
-  // جلب قائمة السور
+  // 1. جلب قائمة السور (عند تحميل التطبيق لأول مرة)
   useEffect(() => {
     fetch('https://api.alquran.cloud/v1/surah')
       .then(res => res.json())
@@ -58,38 +53,51 @@ const Quran = () => {
     }
   }, []);
 
-  // 🚀 [الحل الجذري لمشكلة التحميل]: جلب الآيات أولاً لسرعة العرض، ثم جلب التفسير في الخلفية
+  // 2. جلب الآيات والتفسير (تم إصلاح التداخل والدمج بشكل جذري وآمن)
   useEffect(() => {
-    if (isSetupMode) return;
+    if (isSetupMode || !currentSurahId) return;
     
     setLoading(true);
     setVerses([]); 
     setTafsirs([]);
 
-    // 1. جلب النص القرآني فقط ليعمل فوراً
+    // جلب النص القرآني بالرسم العثماني أولاً
     fetch(`https://api.alquran.cloud/v1/surah/${currentSurahId}/quran-uthmani`)
-      .then(res => res.json())
-      .then(data => {
-        setVerses(data.data.verses);
-        setLoading(false);
+      .then(res => {
+        if (!res.ok) throw new Error("فشل جلب نص السورة");
+        return res.json();
+      })
+      .then(quranData => {
+        const fetchedVerses = quranData.data.verses;
+        setVerses(fetchedVerses); // عرض السورة فوراً للمستخدم
 
-        // 2. جلب التفسير الميسر في الخلفية بصمت
-        fetch(`https://api.alquran.cloud/v1/surah/${currentSurahId}/ar.muyassar`)
-          .then(res => res.json())
-          .then(tafsirData => setTafsirs(tafsirData.data.verses))
-          .catch(err => console.error("تأخر أو فشل جلب التفسير:", err));
-
+        // التمرير التلقائي للعلامة المرجعية
         if (bookmark && bookmark.surahId === currentSurahId) {
           setTimeout(() => {
-            verseRefs.current[bookmark.verseNumber]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            verseRefs.current[bookmark.verseNumber]?.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'center' 
+            });
           }, 500);
         }
+
+        // جلب التفسير الميسر في الخلفية
+        return fetch(`https://api.alquran.cloud/v1/surah/${currentSurahId}/ar.muyassar`);
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("فشل جلب التفسير");
+        return res.json();
+      })
+      .then(tafsirData => {
+        setTafsirs(tafsirData.data.verses); // حفظ التفاعيل دون مقاطعة القراءة
+        setLoading(false);
       })
       .catch(err => {
-        console.error("خطأ في جلب الآيات:", err);
+        console.error("حدث خطأ أثناء جلب البيانات:", err);
         setLoading(false);
       });
-  }, [currentSurahId, isSetupMode]);
+
+  }, [currentSurahId, isSetupMode, bookmark]);
 
   // إعدادات التعرف على الصوت
   useEffect(() => {
@@ -231,7 +239,7 @@ const Quran = () => {
     );
   }
 
-  // 2. شاشة المصحف (القراءة والتسميع)
+  // 2. شاشة المصحف الرئيسية
   return (
     <div className="min-h-screen bg-black text-gray-100 font-sans p-4 md:p-6 text-right relative" dir="rtl">
       
@@ -261,7 +269,7 @@ const Quran = () => {
         </div>
       </div>
 
-      {/* مساحة المصحف */}
+      {/* مساحة المصحف لعرض السور */}
       <div className="w-full bg-gray-950/50 p-4 md:p-8 rounded-2xl border border-gray-900 shadow-2xl min-h-[70vh]">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 text-green-500 text-lg animate-pulse gap-3">
@@ -272,12 +280,11 @@ const Quran = () => {
           <div className="space-y-6 leading-loose tracking-wide">
             {/* البسملة */}
             {currentSurahId !== 1 && currentSurahId !== 9 && (
-              <div className="text-center text-xl md:text-2xl font-arabic text-green-400 my-4 drop-shadow-md">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+              <div className="text-center text-xl md:text-2xl font-arabic text-green-400 my-4 drop-shadow-md">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
             )}
 
-            {/* تم تصغير الخط هنا ليكون مريحاً (text-lg md:text-xl) */}
             <div className="flex flex-wrap justify-center text-right font-arabic text-lg md:text-xl gap-x-2 gap-y-4">
-              {verses.map((verse) => {
+              {verses.map((verse, idx) => {
                 const isBookmarked = bookmark && bookmark.surahId === currentSurahId && bookmark.verseNumber === verse.numberInSurah;
                 const isActive = activeVerseId === verse.numberInSurah;
 
@@ -292,9 +299,11 @@ const Quran = () => {
                     <span 
                       onClick={() => {
                         setActiveVerseId(verse.numberInSurah);
-                        // جلب التفسير من الـ State الخاص به
-                        const tafsirObj = tafsirs.find(t => t.numberInSurah === verse.numberInSurah);
-                        setSelectedTafsir(tafsirObj ? tafsirObj.text : 'جاري تحميل التفسير... يرجى الانتظار.');
+                        
+                        // مطابقة التفسير بالترتيب (Index) لمنع الكراش والشاشة البيضاء تماماً
+                        const tafsirObj = tafsirs && tafsirs.length > idx ? tafsirs[idx] : null;
+                          
+                        setSelectedTafsir(tafsirObj?.text || 'جاري تحميل التفسير... يرجى الانتظار ثواني.');
                         setShowAssistant(true);
                       }}
                       className={`cursor-pointer transition-all selection:bg-green-500/30 ${
@@ -304,7 +313,7 @@ const Quran = () => {
                       {verse.text}
                     </span>
 
-                    {/* تم تصغير رقم الآية (w-6 h-6 text-[10px]) */}
+                    {/* رقم الآية */}
                     <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-gray-700 text-[10px] text-green-500 font-sans mr-1 ml-1.5 bg-black">
                       {verse.numberInSurah}
                     </span>
@@ -329,7 +338,7 @@ const Quran = () => {
         )}
       </div>
 
-      {/* الشاشة الصغيرة المنبثقة (المساعد الذكي والتفسير) */}
+      {/* الشاشة الصغيرة المنبثقة للمساعد الذكي والتفسير */}
       {showAssistant && (
         <div className="fixed bottom-4 left-4 md:bottom-6 md:left-6 w-[90%] md:w-[350px] bg-black/95 backdrop-blur-xl border-2 border-gray-800 rounded-2xl shadow-[0_0_30px_rgba(0,255,128,0.15)] p-4 md:p-5 z-50 flex flex-col gap-4">
           
@@ -373,7 +382,7 @@ const Quran = () => {
                 )}
               </div>
 
-              {/* قسم التفسير */}
+              {/* قسم التفسير الآمن */}
               <div className="bg-gray-900 rounded-xl p-3 md:p-4 border border-gray-800">
                 <span className="text-xs text-blue-400 font-bold block mb-2">تفسير الآية {activeVerseId}:</span>
                 <p className="text-xs md:text-sm text-gray-300 leading-relaxed text-justify font-sans">{selectedTafsir}</p>
