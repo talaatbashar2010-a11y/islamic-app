@@ -5,21 +5,21 @@ const Quran = () => {
   // حالات إدارة البيانات
   const [surahs, setSurahs] = useState([]);
   const [currentSurahId, setCurrentSurahId] = useState(1);
-  const [verses, setVerses] = useState([]);
+  const [verses, setVerses] = useState([]); // لحفظ الآيات فقط لسرعة التحميل
+  const [tafsirs, setTafsirs] = useState([]); // لحفظ التفسير بشكل منفصل
   const [loading, setLoading] = useState(false);
-  const [isSetupMode, setIsSetupMode] = useState(true); // للتحكم في شاشة البداية
+  const [isSetupMode, setIsSetupMode] = useState(true);
   
   // ميزات التحكم والعرض
   const [hideVerses, setHideVerses] = useState(false);
   const [activeVerseId, setActiveVerseId] = useState(null);
   const [selectedTafsir, setSelectedTafsir] = useState('');
   const [bookmark, setBookmark] = useState(null);
-  const [showAssistant, setShowAssistant] = useState(false); // إظهار/إخفاء الشاشة الصغيرة العائمة
+  const [showAssistant, setShowAssistant] = useState(false);
   
-  // البحث الحديث
+  // البحث
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
 
   // الصوتيات
   const [playingAudio, setPlayingAudio] = useState(null);
@@ -33,7 +33,7 @@ const Quran = () => {
 
   const verseRefs = useRef({});
 
-  // تنظيف النص العربي للمقارنة والبحث
+  // تنظيف النص العربي للمقارنة
   const normalizeArabic = (str) => {
     if (!str) return '';
     return str
@@ -45,7 +45,7 @@ const Quran = () => {
       .trim();
   };
 
-  // جلب قائمة السور في البداية
+  // جلب قائمة السور
   useEffect(() => {
     fetch('https://api.alquran.cloud/v1/surah')
       .then(res => res.json())
@@ -54,30 +54,30 @@ const Quran = () => {
 
     const savedBookmark = localStorage.getItem('quran_bookmark');
     if (savedBookmark) {
-      const parsed = JSON.parse(savedBookmark);
-      setBookmark(parsed);
+      setBookmark(JSON.parse(savedBookmark));
     }
   }, []);
 
-  // جلب الآيات والتفسير بطلب واحد مدمج (لحل مشكلة التحميل)
+  // 🚀 [الحل الجذري لمشكلة التحميل]: جلب الآيات أولاً لسرعة العرض، ثم جلب التفسير في الخلفية
   useEffect(() => {
-    if (isSetupMode) return; // لا تحمل الآيات إلا بعد الدخول
+    if (isSetupMode) return;
     
     setLoading(true);
-    // جلب النص العثماني والتفسير الميسر في مسار واحد
-    fetch(`https://api.alquran.cloud/v1/surah/${currentSurahId}/editions/quran-uthmani,ar.muyassar`)
+    setVerses([]); 
+    setTafsirs([]);
+
+    // 1. جلب النص القرآني فقط ليعمل فوراً
+    fetch(`https://api.alquran.cloud/v1/surah/${currentSurahId}/quran-uthmani`)
       .then(res => res.json())
       .then(data => {
-        const textVerses = data.data[0].verses;
-        const tafsirVerses = data.data[1].verses;
-        
-        const combinedVerses = textVerses.map((verse, index) => ({
-          ...verse,
-          tafsir: tafsirVerses[index].text
-        }));
-        
-        setVerses(combinedVerses);
+        setVerses(data.data.verses);
         setLoading(false);
+
+        // 2. جلب التفسير الميسر في الخلفية بصمت
+        fetch(`https://api.alquran.cloud/v1/surah/${currentSurahId}/ar.muyassar`)
+          .then(res => res.json())
+          .then(tafsirData => setTafsirs(tafsirData.data.verses))
+          .catch(err => console.error("تأخر أو فشل جلب التفسير:", err));
 
         if (bookmark && bookmark.surahId === currentSurahId) {
           setTimeout(() => {
@@ -129,11 +129,11 @@ const Quran = () => {
 
   const toggleRecording = (verseNumber) => {
     if (!recognitionRef.current) {
-      alert("متصفحك لا يدعم التسميع الصوتي.");
+      alert("متصفحك لا يدعم التسميع الصوتي. يرجى استخدام Chrome.");
       return;
     }
     setActiveVerseId(verseNumber);
-    setShowAssistant(true); // إظهار المساعد العائم تلقائياً عند التسميع
+    setShowAssistant(true); 
 
     if (isRecording) {
       recognitionRef.current.stop();
@@ -160,23 +160,6 @@ const Quran = () => {
       .catch(err => console.error(err));
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    
-    fetch(`https://api.alquran.cloud/v1/search/${searchQuery}/all/ar`)
-      .then(res => res.json())
-      .then(data => {
-        setSearchResults(data.data.matches || []);
-        setIsSearching(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setIsSearching(false);
-      });
-  };
-
   const playAudio = (verseId) => {
     if (playingAudio === verseId) {
       audioRef.current.pause();
@@ -195,11 +178,10 @@ const Quran = () => {
     localStorage.setItem('quran_bookmark', JSON.stringify(newBookmark));
   };
 
-  // ================= شاشة البداية والاختيار المسبق =================
+  // 1. شاشة البداية والاختيار المسبق
   if (isSetupMode) {
     return (
       <div className="min-h-screen bg-black text-white font-sans p-6 text-right flex flex-col items-center justify-center relative overflow-hidden" dir="rtl">
-        {/* خلفية بتأثير النيون */}
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-black via-gray-900 to-black z-0"></div>
         <div className="absolute w-96 h-96 bg-green-500/10 blur-[100px] rounded-full top-1/4 left-1/4 z-0"></div>
         <div className="absolute w-96 h-96 bg-blue-500/10 blur-[100px] rounded-full bottom-1/4 right-1/4 z-0"></div>
@@ -210,7 +192,6 @@ const Quran = () => {
           </h1>
           
           <div className="space-y-6">
-            {/* السورة */}
             <div className="flex flex-col gap-2">
               <label className="text-sm text-green-400 font-bold">اختر السورة للبدء:</label>
               <select 
@@ -224,7 +205,6 @@ const Quran = () => {
               </select>
             </div>
 
-            {/* الجزء */}
             <div className="flex flex-col gap-2">
               <label className="text-sm text-blue-400 font-bold">أو اختر الجزء:</label>
               <select 
@@ -239,7 +219,6 @@ const Quran = () => {
               </select>
             </div>
 
-            {/* زر الدخول */}
             <button 
               onClick={() => setIsSetupMode(false)}
               className="w-full mt-6 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-black font-bold text-lg p-4 rounded-xl shadow-[0_0_20px_rgba(0,255,128,0.3)] transition-all transform hover:scale-[1.02]"
@@ -252,7 +231,7 @@ const Quran = () => {
     );
   }
 
-  // ================= شاشة المصحف (القراءة والتسميع) =================
+  // 2. شاشة المصحف (القراءة والتسميع)
   return (
     <div className="min-h-screen bg-black text-gray-100 font-sans p-4 md:p-6 text-right relative" dir="rtl">
       
@@ -268,33 +247,36 @@ const Quran = () => {
         <div className="flex gap-3">
           <button 
             onClick={() => setShowAssistant(!showAssistant)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-[0_0_10px_rgba(0,0,0,0.5)] ${showAssistant ? 'bg-blue-600 text-white' : 'bg-gray-900 text-blue-400 border border-gray-800'}`}
+            className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-bold transition-all shadow-[0_0_10px_rgba(0,0,0,0.5)] ${showAssistant ? 'bg-blue-600 text-white' : 'bg-gray-900 text-blue-400 border border-gray-800'}`}
           >
             {showAssistant ? '✖ إغلاق المساعد' : '💡 المساعد والتفسير'}
           </button>
           
           <button 
             onClick={() => setHideVerses(!hideVerses)} 
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-[0_0_10px_rgba(0,0,0,0.5)] ${hideVerses ? 'bg-green-600 text-black shadow-[0_0_15px_rgba(0,255,128,0.4)]' : 'bg-gray-900 text-green-400 border border-gray-800'}`}
+            className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-bold transition-all shadow-[0_0_10px_rgba(0,0,0,0.5)] ${hideVerses ? 'bg-green-600 text-black shadow-[0_0_15px_rgba(0,255,128,0.4)]' : 'bg-gray-900 text-green-400 border border-gray-800'}`}
           >
             {hideVerses ? '👁️ إظهار الآيات' : '🙈 إخفاء الآيات'}
           </button>
         </div>
       </div>
 
-      {/* مساحة المصحف (بكامل العرض الشاشة) */}
-      <div className="w-full bg-gray-950/50 p-4 md:p-8 rounded-2xl border border-gray-900 shadow-2xl">
+      {/* مساحة المصحف */}
+      <div className="w-full bg-gray-950/50 p-4 md:p-8 rounded-2xl border border-gray-900 shadow-2xl min-h-[70vh]">
         {loading ? (
-          <div className="text-center py-32 text-green-500 text-xl animate-pulse">جاري تحميل كلام الله... ✨</div>
+          <div className="flex flex-col items-center justify-center py-32 text-green-500 text-lg animate-pulse gap-3">
+            <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+            جاري تحميل الآيات...
+          </div>
         ) : (
           <div className="space-y-6 leading-loose tracking-wide">
             {/* البسملة */}
             {currentSurahId !== 1 && currentSurahId !== 9 && (
-              <div className="text-center text-2xl font-arabic text-green-400 my-6 drop-shadow-md">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+              <div className="text-center text-xl md:text-2xl font-arabic text-green-400 my-4 drop-shadow-md">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
             )}
 
-            {/* الآيات بحجم خط أصغر وأكثر تناسقاً */}
-            <div className="flex flex-wrap justify-center text-right font-arabic text-xl md:text-2xl gap-x-2 gap-y-5">
+            {/* تم تصغير الخط هنا ليكون مريحاً (text-lg md:text-xl) */}
+            <div className="flex flex-wrap justify-center text-right font-arabic text-lg md:text-xl gap-x-2 gap-y-4">
               {verses.map((verse) => {
                 const isBookmarked = bookmark && bookmark.surahId === currentSurahId && bookmark.verseNumber === verse.numberInSurah;
                 const isActive = activeVerseId === verse.numberInSurah;
@@ -303,29 +285,32 @@ const Quran = () => {
                   <span 
                     key={verse.number} 
                     ref={el => verseRefs.current[verse.numberInSurah] = el}
-                    className={`inline-block p-1.5 rounded-lg transition-all duration-300 relative group ${
+                    className={`inline-block p-1 rounded-lg transition-all duration-300 relative group ${
                       isBookmarked ? 'bg-blue-900/30 border border-blue-500/50 text-blue-100' : ''
                     } ${isActive ? 'bg-gray-800/80 shadow-[0_0_10px_rgba(255,255,255,0.1)]' : 'hover:bg-gray-900/60'}`}
                   >
                     <span 
                       onClick={() => {
                         setActiveVerseId(verse.numberInSurah);
-                        setSelectedTafsir(verse.tafsir);
+                        // جلب التفسير من الـ State الخاص به
+                        const tafsirObj = tafsirs.find(t => t.numberInSurah === verse.numberInSurah);
+                        setSelectedTafsir(tafsirObj ? tafsirObj.text : 'جاري تحميل التفسير... يرجى الانتظار.');
                         setShowAssistant(true);
                       }}
                       className={`cursor-pointer transition-all selection:bg-green-500/30 ${
-                        hideVerses && !isActive ? 'bg-gray-800 text-gray-800 select-none blur-[4px] opacity-30' : 'text-gray-200 hover:text-white'
+                        hideVerses && !isActive ? 'bg-gray-800 text-gray-800 select-none blur-[3px] opacity-40' : 'text-gray-300 hover:text-white'
                       }`}
                     >
                       {verse.text}
                     </span>
 
-                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-gray-700 text-[10px] text-green-500 font-sans mr-1 ml-2 bg-black">
+                    {/* تم تصغير رقم الآية (w-6 h-6 text-[10px]) */}
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-gray-700 text-[10px] text-green-500 font-sans mr-1 ml-1.5 bg-black">
                       {verse.numberInSurah}
                     </span>
 
                     {/* الأدوات السريعة */}
-                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-black px-3 py-1.5 rounded-lg border border-gray-800 shadow-2xl hidden group-hover:flex gap-3 z-10 text-sm font-sans w-max">
+                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black px-2 py-1 rounded-lg border border-gray-800 shadow-2xl hidden group-hover:flex gap-3 z-10 text-xs font-sans w-max">
                       <button onClick={() => playAudio(verse.number)} className="hover:text-blue-400 transition-colors">
                         {playingAudio === verse.number ? '⏸️' : '🔊 استماع'}
                       </button>
@@ -346,18 +331,18 @@ const Quran = () => {
 
       {/* الشاشة الصغيرة المنبثقة (المساعد الذكي والتفسير) */}
       {showAssistant && (
-        <div className="fixed bottom-6 left-6 w-[350px] bg-black/95 backdrop-blur-xl border-2 border-gray-800 rounded-2xl shadow-[0_0_30px_rgba(0,255,128,0.15)] p-5 z-50 flex flex-col gap-4">
+        <div className="fixed bottom-4 left-4 md:bottom-6 md:left-6 w-[90%] md:w-[350px] bg-black/95 backdrop-blur-xl border-2 border-gray-800 rounded-2xl shadow-[0_0_30px_rgba(0,255,128,0.15)] p-4 md:p-5 z-50 flex flex-col gap-4">
           
           <div className="flex justify-between items-center border-b border-gray-800 pb-2">
             <h3 className="text-sm font-bold text-green-400">💡 المساعد والتفسير</h3>
-            <button onClick={() => setShowAssistant(false)} className="text-gray-500 hover:text-red-500">✖</button>
+            <button onClick={() => setShowAssistant(false)} className="text-gray-500 hover:text-red-500 text-lg">✖</button>
           </div>
 
           {activeVerseId ? (
             <div className="space-y-4 overflow-y-auto max-h-[60vh] custom-scrollbar pr-1">
               
               {/* قسم التسميع */}
-              <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+              <div className="bg-gray-900 rounded-xl p-3 md:p-4 border border-gray-800">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs text-gray-400">تسميع الآية {activeVerseId}</span>
                   <button 
@@ -373,8 +358,7 @@ const Quran = () => {
                 {transcript && (
                   <div className="mt-2 text-center">
                     <p className="text-xs text-gray-500 mb-1">نطقك:</p>
-                    {/* اللون يتغير للأخضر في حال الصح، وللأحمر في حال الخطأ */}
-                    <p className={`font-arabic text-md ${
+                    <p className={`font-arabic text-sm md:text-md ${
                         isCorrect === true ? 'text-green-500 drop-shadow-[0_0_5px_rgba(0,255,0,0.5)]' 
                         : isCorrect === false ? 'text-red-500 drop-shadow-[0_0_5px_rgba(255,0,0,0.5)]' 
                         : 'text-gray-300'
@@ -390,18 +374,17 @@ const Quran = () => {
               </div>
 
               {/* قسم التفسير */}
-              <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+              <div className="bg-gray-900 rounded-xl p-3 md:p-4 border border-gray-800">
                 <span className="text-xs text-blue-400 font-bold block mb-2">تفسير الآية {activeVerseId}:</span>
-                <p className="text-sm text-gray-300 leading-relaxed text-justify font-sans">{selectedTafsir}</p>
+                <p className="text-xs md:text-sm text-gray-300 leading-relaxed text-justify font-sans">{selectedTafsir}</p>
               </div>
 
             </div>
           ) : (
-            <p className="text-xs text-gray-500 text-center py-8">اضغط على أي آية في المصحف ليظهر لك التفسير أو لتبدأ التسميع.</p>
+            <p className="text-xs text-gray-500 text-center py-6">اضغط على أي آية في المصحف ليظهر لك التفسير أو لتبدأ التسميع.</p>
           )}
         </div>
       )}
-
     </div>
   );
 };
